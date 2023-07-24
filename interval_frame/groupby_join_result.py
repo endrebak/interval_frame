@@ -71,11 +71,9 @@ class GroupByJoinResult:
         deduplicate: bool,
     ) -> pl.LazyFrame:
         if deduplicate:
-            return frame.groupby(frame.columns).agg(
-                [pl.all(), pl.count().alias(COUNT_PROPERTY)]
-            )
-        else:
-            return frame
+            return frame.groupby(frame.columns).agg([pl.all(), pl.count().alias(COUNT_PROPERTY)])
+
+        return frame
 
     def _perform_join(
         self,
@@ -94,19 +92,18 @@ class GroupByJoinResult:
                 suffix=self.suffix,
             )
             return joined_frame.with_row_count(ROW_NUMBER_PROPERTY)
-        else:
-            joined_frame = (
-                sorted_main.groupby(self.by)
-                .all()
-                .join(
-                    sorted_secondary.groupby(self.by).all(),
-                    left_on=self.by,
-                    right_on=self.by,
-                    suffix=self.suffix,
-                    how=join_type,
-                )
+
+        return (
+            sorted_main.groupby(self.by)
+            .all()
+            .join(
+                sorted_secondary.groupby(self.by).all(),
+                left_on=self.by,
+                right_on=self.by,
+                suffix=self.suffix,
+                how=join_type,
             )
-            return joined_frame
+        )
 
     def is_empty(self) -> bool:
         """

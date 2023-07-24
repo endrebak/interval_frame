@@ -1,17 +1,11 @@
-import interval_frame
-
-from hypothesis import given, settings, reproduce_failure
+from hypothesis import given, settings
 
 from tests.property.helpers import to_pyranges, compare_frames
 from tests.property.hypothesis_settings import MAX_EXAMPLES, PRINT_BLOB
 from tests.property.generate_intervals import interval_df
 
 
-@settings(
-    max_examples=MAX_EXAMPLES,
-    print_blob=PRINT_BLOB,
-    deadline=None
-)
+@settings(max_examples=MAX_EXAMPLES, print_blob=PRINT_BLOB, deadline=None)
 @given(df=interval_df(), df2=interval_df())
 def test_join(df, df2):
     print(df)

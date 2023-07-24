@@ -1,9 +1,9 @@
 from datetime import date
-import interval_frame
 
 import polars as pl
 
-from interval_frame.groupby_join_result import GroupByJoinResult
+import interval_frame  # noqa
+
 
 CHROMOSOME_PROPERTY = "chromosome"
 CHROMOSOME2_PROPERTY = "chromosome_2"
@@ -57,18 +57,16 @@ def chromosome_join(df, df2):
 
 
 def test_join():
-    res = df.interval.join(
-        df2.lazy(), on=("starts", "ends"), suffix="_2"
-    ).collect()
+    res = df.interval.join(df2.lazy(), on=("starts", "ends"), suffix="_2").collect()
     expected = pl.DataFrame(
         [
-            pl.Series("chromosome", ['chr1', 'chr1', 'chr1', 'chr1', 'chr1', 'chr1'], dtype=pl.Utf8),
+            pl.Series("chromosome", ["chr1", "chr1", "chr1", "chr1", "chr1", "chr1"], dtype=pl.Utf8),
             pl.Series("starts", [0, 0, 5, 5, 6, 6], dtype=pl.Int64),
             pl.Series("ends", [6, 6, 7, 7, 10, 10], dtype=pl.Int64),
-            pl.Series("chromosome_2", ['chr1', 'chr1', 'chr1', 'chr1', 'chr1', 'chr1'], dtype=pl.Utf8),
+            pl.Series("chromosome_2", ["chr1", "chr1", "chr1", "chr1", "chr1", "chr1"], dtype=pl.Utf8),
             pl.Series("starts_2", [1, 3, 3, 6, 3, 6], dtype=pl.Int64),
             pl.Series("ends_2", [2, 8, 8, 7, 8, 7], dtype=pl.Int64),
-            pl.Series("genes", ['c', 'b', 'b', 'a', 'b', 'a'], dtype=pl.Utf8),
+            pl.Series("genes", ["c", "b", "b", "a", "b", "a"], dtype=pl.Utf8),
         ]
     )
     sorted_res = res.sort(["starts", "ends", "starts_2", "ends_2"])
@@ -110,12 +108,8 @@ def test_time():
             pl.Series("id", ["1", "2"], dtype=pl.Utf8),
             pl.Series("start", [date(2022, 1, 1), date(2022, 3, 4)], dtype=pl.Date),
             pl.Series("end", [date(2022, 2, 4), date(2022, 3, 10)], dtype=pl.Date),
-            pl.Series(
-                "start_whatevz", [date(2021, 12, 31), date(2021, 12, 31)], dtype=pl.Date
-            ),
-            pl.Series(
-                "end_whatevz", [date(2022, 4, 1), date(2022, 4, 1)], dtype=pl.Date
-            ),
+            pl.Series("start_whatevz", [date(2021, 12, 31), date(2021, 12, 31)], dtype=pl.Date),
+            pl.Series("end_whatevz", [date(2022, 4, 1), date(2022, 4, 1)], dtype=pl.Date),
         ]
     )
 
@@ -126,9 +120,7 @@ def test_time():
 def test_overlap():
     res = df.interval.overlap(df2.lazy(), on=("starts", "ends"))
     a = res.collect().sort("starts")
-    expected = pl.DataFrame(
-        {"chromosome": ["chr1"] * 3, "starts": [0, 5, 6], "ends": [6, 7, 10]}
-    )
+    expected = pl.DataFrame({"chromosome": ["chr1"] * 3, "starts": [0, 5, 6], "ends": [6, 7, 10]})
 
     assert a.frame_equal(expected)
 
@@ -137,23 +129,25 @@ def test_join_groupby():
     df = pl.DataFrame(
         {
             "k": ["A", "B", "A"],
-            "a": [1, 0, 30, ],
-            "b": [2, 7, 40, ]
+            "a": [
+                1,
+                0,
+                30,
+            ],
+            "b": [
+                2,
+                7,
+                40,
+            ],
         }
     )
-    df2 = pl.LazyFrame(
-        {
-            "k": ["B", "A", "C", "B"],
-            "a": [6, 0, 5, 29],
-            "b": [10, 3, 6, 30]
-        }
-    )
+    df2 = pl.LazyFrame({"k": ["B", "A", "C", "B"], "a": [6, 0, 5, 29], "b": [10, 3, 6, 30]})
 
     res = df.interval.join(df2.lazy(), on=("a", "b"), by="k", suffix="_2").collect().sort("k", descending=True)
     print(res)
     expected_result = pl.DataFrame(
         [
-            pl.Series("k", ['B', 'A'], dtype=pl.Utf8),
+            pl.Series("k", ["B", "A"], dtype=pl.Utf8),
             pl.Series("a", [0, 1], dtype=pl.Int64),
             pl.Series("b", [7, 2], dtype=pl.Int64),
             pl.Series("a_2", [6, 0], dtype=pl.Int64),
@@ -166,28 +160,20 @@ def test_join_groupby():
 
 
 def test_join_groupby_2():
-    df = pl.LazyFrame(
-        {
-            "k": ["A", "B", "A", "A"],
-            "a": [1, 0, 28, 100],
-            "b": [2, 7, 40, 200]
-        }
-    )
-    df2 = pl.LazyFrame(
-        {
-            "k": ["B", "A", "C", "A", "A"],
-            "a": [6, 0, 5, 29, 0],
-            "b": [10, 3, 6, 30, 300]
-        }
-    )
+    df = pl.LazyFrame({"k": ["A", "B", "A", "A"], "a": [1, 0, 28, 100], "b": [2, 7, 40, 200]})
+    df2 = pl.LazyFrame({"k": ["B", "A", "C", "A", "A"], "a": [6, 0, 5, 29, 0], "b": [10, 3, 6, 30, 300]})
 
-    res = df.interval.join(df2, on=("a", "b"), by="k").collect().sort("k", "a", "b", "a_right", "b_right", descending=False)
+    res = (
+        df.interval.join(df2, on=("a", "b"), by="k")
+        .collect()
+        .sort("k", "a", "b", "a_right", "b_right", descending=False)
+    )
 
     print(res)
     print(res.to_init_repr())
     expected_result = pl.DataFrame(
         [
-            pl.Series("k", ['A', 'A', 'A', 'A', 'A', 'B'], dtype=pl.Utf8),
+            pl.Series("k", ["A", "A", "A", "A", "A", "B"], dtype=pl.Utf8),
             pl.Series("a", [1, 1, 28, 28, 100, 0], dtype=pl.Int64),
             pl.Series("b", [2, 2, 40, 40, 200, 7], dtype=pl.Int64),
             pl.Series("a_right", [0, 0, 0, 29, 0, 6], dtype=pl.Int64),
@@ -197,3 +183,35 @@ def test_join_groupby_2():
     print(expected_result)
 
     assert res.frame_equal(expected_result)
+
+
+def test_join_no_overlap():
+    df = pl.LazyFrame(
+        {
+            "a": [
+                1,
+                10,
+                30,
+            ],
+            "b": [
+                2,
+                11,
+                40,
+            ],
+        },
+    )
+
+    df2 = pl.LazyFrame(
+        {
+            "a": [6, 0],
+            "b": [7, 1],
+        },
+    )
+
+    res = df.interval.join(
+        df2.lazy(),
+        on=("a", "b"),
+    )
+
+    print(res.collect())
+    raise

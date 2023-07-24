@@ -12,6 +12,16 @@ dependencies = [
 ]
 
 
-
 [project.optional-dependencies]
-dev = ["pyranges", "pytest", "hypothesis", "bioframe"]
+dev = ["pyranges", "pytest", "hypothesis", "bioframe", "ruff"]
+
+[tool.ruff]
+line-length = 120
+select = [
+    "E",   # pycodestyle
+    "F",   # pyflakes
+    "UP",  # pyupgrade
+    "B",   # bugbear
+    "C",   # mccabe
+    "R",   # flake8-rst-docstrings
+]

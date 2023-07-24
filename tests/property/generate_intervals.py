@@ -21,30 +21,27 @@ non_empty_dfs = dataframes(
         column("Start", dtype=pl.UInt64, strategy=strategies.integers(min_value=0, max_value=1_000_000)),
         column("lengths", dtype=pl.UInt32, strategy=strategies.integers(min_value=1, max_value=100_000)),
         column("Strand", strategy=strategies.sampled_from(["+", "-"])),
-    ]
+    ],
 )
 
 
 @strategies.composite
 def interval_df(draw):
     df = draw(dfs)
-    df = df.select(
+    return df.select(
         pl.col("Chromosome"),
         pl.col("Start"),
         pl.col("Start").add(pl.col("lengths")).alias("End"),
         pl.col("Strand"),
     )
-    return df
 
 
 @strategies.composite
 def non_empty_interval_df(draw):
     df = draw(non_empty_dfs)
-    df = df.select(
+    return df.select(
         pl.col("Chromosome"),
         pl.col("Start"),
         pl.col("Start").add(pl.col("lengths")).alias("End"),
         pl.col("Strand"),
     )
-    return df
-

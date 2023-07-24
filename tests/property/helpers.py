@@ -9,10 +9,10 @@ def to_pyranges(df):
 
 
 def compare_frames(
-        *,
-        pl_df: pd.DataFrame,
-        pd_df: pd.DataFrame,
-        comparison_cols: Tuple[str, ...] = ("Start", "End", "Start_right", "End_right")
+    *,
+    pl_df: pd.DataFrame,
+    pd_df: pd.DataFrame,
+    comparison_cols: Tuple[str, ...] = ("Start", "End", "Start_right", "End_right"),
 ) -> None:
     if pl_df.empty and pd_df.empty:
         print("BOTH_EMPTY")
@@ -26,4 +26,3 @@ def compare_frames(
         pl_df_col_ = list(pl_df[col])
         pd_df_col_ = list(pd_df[col])
         assert pl_df_col_ == pd_df_col_
-
