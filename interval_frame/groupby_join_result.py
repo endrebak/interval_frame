@@ -162,6 +162,18 @@ class GroupByJoinResult:
             self.by,
         )
 
+    def get_colnames_without_groupby_and_count(
+            self,
+    ) -> List[str]:
+        """
+        Returns the column names of the main frame excluding the 'groupby' and COUNT columns.
+        """
+        return self._get_cols_excluding(
+            self.main_frame.columns,
+            self.by + [COUNT_PROPERTY],
+        )
+
+
     def get_colnames_secondary_without_groupby(
         self,
     ) -> List[str]:

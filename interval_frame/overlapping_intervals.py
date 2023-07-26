@@ -241,7 +241,11 @@ class OverlappingIntervals:
             ).explode().drop_nulls(),
         )
 
-    def overlapping_pairs(self) -> "pl.LazyFrame":
+    def overlapping_pairs(
+            self,
+            how: Literal["inner", "left", "right", "outer"] = "inner",
+            nulls_last: bool = False, # in case of missing values, should they be last (possible when how "outer", "left", "right")?
+    ) -> "pl.LazyFrame":
         """
         Calculates the overlapping pairs in the joined data frames.
 
@@ -257,49 +261,97 @@ class OverlappingIntervals:
         self.joined_result.get_colnames_secondary_without_groupby()
 
         # Calculate the top left, bottom left, top right, and bottom right parts of the final result
-        top_left = self.calculate_top_left(df_column_names_without_groupby_ks, group_keys)
-        print(top_left.collect())
-        missing_top_left = self._calculate_missing_top_left(df_column_names_without_groupby_ks, group_keys)
-        missing_bottom_left = self._calculate_missing_bottom_left(df_column_names_without_groupby_ks, group_keys)
+        missing_left = self.missing_overlaps_left(df_column_names_without_groupby_ks, group_keys, include_right=True)
+        print("missing_left")
+        print(missing_left.collect())
         # print("\nmissing_top_left", missing_top_left.collect())
-        print("missing_bottom_left", missing_bottom_left.collect())
-        raise
+        top_left = self.calculate_top_left(df_column_names_without_groupby_ks, group_keys)
         bottom_left = self.calculate_bottom_left(df_column_names_without_groupby_ks, group_keys)
+        print("top_left")
+        print(top_left.collect())
+        print("bottom_left")
+        print(bottom_left.collect())
         top_right = self.calculate_top_right(df_2_column_names_after_join, group_keys)
         bottom_right = self.calculate_bottom_right(df_2_column_names_after_join, group_keys)
+        print("top_right")
+        print(top_right.collect())
+        print("bottom_right")
+        print(bottom_right.collect())
+        top = top_left.with_context(top_right).select(pl.all())
+        bottom = bottom_left.with_context(bottom_right).select(pl.all())
 
         missing = []
-        how = "outer"
-        print(how)
         if how in ["left", "outer"]:
-            print(self.missing_overlaps_left().collect())
-            missing += [self.missing_overlaps_left()]
+            missing += [self.missing_overlaps_left(df_column_names_without_groupby_ks, group_keys, include_right=True)]
         if how in ["right", "outer"]:
-            print("missing_right:")
-            print(self.missing_overlaps_right().collect())
-            raise
             missing += [self.missing_overlaps_right()]
 
-
         # Concatenate the parts to get the final result
-        return self.explode_by_repeats(
-            pl.concat([top_left, bottom_left]).with_context(pl.concat([top_right, bottom_right])).select(pl.all())
+        overlapping = pl.concat(
+            [top_left, bottom_left]
+        ).with_context(
+            pl.concat(
+                [top_right, bottom_right]
+            )
+        ).select(
+            pl.all()
         )
 
-    def missing_overlaps_left(self):
+        if how == "inner":
+            return overlapping
+        elif nulls_last:
+            return pl.concat(
+                [overlapping] + missing,
+                how="vertical_relaxed"
+            )
+        else:
+            return pl.concat(
+                missing + [overlapping],
+                how="vertical_relaxed"
+            )
+
+    def missing_overlaps_left(
+            self,
+            df_column_names_without_groupby_ks,
+            group_keys,
+            include_right: bool = False
+        ):
         """Return the missing overlaps on the left side of the join."""
-        return self.data.select(
+
+        missing_top_left = self._calculate_missing_top_left(df_column_names_without_groupby_ks, group_keys)
+        missing_bottom_left = self._calculate_missing_bottom_left(df_column_names_without_groupby_ks, group_keys)
+
+        missing_left = pl.concat(
             [
-                pl.col(
-                    self.joined_result.columns
-                ).explode().filter(
-                    ~pl.col(MASK_2IN1_PROPERTY).explode()
-                ).repeat_by(pl.col(COUNT_PROPERTY).explode().filter(~pl.col(MASK_2IN1_PROPERTY).explode())).explode(),
-            ] + [
-                pl.lit(None).alias(c) for c in
-                self.joined_result.get_colnames_secondary_without_groupby()
+                missing_top_left,
+                missing_bottom_left,
             ]
+        ).groupby(
+            self.joined_result.get_colnames_without_groupby_and_count(),
+        ).agg(
+            pl.all()
+        ).filter(
+            pl.col(COUNT_PROPERTY).list.lengths() == 2,
+        ).groupby(
+            group_keys
+        ).agg(
+            [
+                pl.col(self.joined_result.get_colnames_without_groupby_and_count()),
+                pl.col(COUNT_PROPERTY).list.sum().explode().keep_name(),
+            ]
+        ).explode(
+            pl.all()
         )
+
+        if include_right:
+            missing_left = missing_left.with_columns(
+                [
+                    pl.lit(None).alias(c) for c in
+                    self.joined_result.get_colnames_secondary_without_groupby()
+                ]
+            )
+
+        return missing_left
 
     def missing_overlaps_right(self):
         """Return the missing overlaps on the left side of the join."""
@@ -383,7 +435,7 @@ class OverlappingIntervals:
         Helper function to calculate the bottom left part of the final result.
         """
         return (
-            self.data.inspect("data {}").groupby(group_keys)
+            self.data.groupby(group_keys)
             .agg(
                 [
                     pl.all().explode(),
@@ -410,9 +462,11 @@ class OverlappingIntervals:
                     pl.col("__duplicated_indices__").explode().filter(
                         ~pl.col("__duplicated_indices__").explode().is_duplicated()
                     )
-                )
+                ).explode()
             )
-        ).sort(group_keys)
+        ).sort(group_keys).explode(
+            pl.col(self.joined_result.get_colnames_without_groupby()),
+        )
 
     def calculate_bottom_left(self, df_column_names_without_groupby_ks, group_keys):
         """

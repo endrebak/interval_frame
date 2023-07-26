@@ -213,7 +213,9 @@ def test_join_no_overlap():
     res = df.interval.join(
         df2.lazy(),
         on=("a", "b"),
+        how="left",
     )
 
+    print("res")
     print(res.collect())
     raise
