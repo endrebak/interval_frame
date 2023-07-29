@@ -21,7 +21,7 @@ MASK_2IN1_PROPERTY = "mask_2in1"
 LENGTHS_2IN1_PROPERTY = "lengths_2in1"
 LENGTHS_1IN2_PROPERTY = "lengths_1in2"
 
-df = pl.DataFrame(
+df_ = pl.DataFrame(
     {
         CHROMOSOME_PROPERTY: ["chr1", "chr1", "chr1", "chr1"],
         STARTS_PROPERTY: [0, 8, 6, 5],
@@ -29,9 +29,9 @@ df = pl.DataFrame(
     }
 )
 
-DF1_COLUMNS = df.columns
+DF1_COLUMNS = df_.columns
 
-df2 = pl.DataFrame(
+df2_ = pl.DataFrame(
     {
         CHROMOSOME_PROPERTY: ["chr1", "chr1", "chr1"],
         STARTS_PROPERTY: [6, 3, 1],
@@ -40,7 +40,7 @@ df2 = pl.DataFrame(
     }
 )
 
-DF2_COLUMNS = df2.columns
+DF2_COLUMNS = df2_.columns
 
 
 def chromosome_join(df, df2):
@@ -57,7 +57,7 @@ def chromosome_join(df, df2):
 
 
 def test_join():
-    res = df.interval.join(df2.lazy(), on=("starts", "ends"), suffix="_2").collect()
+    res = df_.interval.join(df2_.lazy(), on=("starts", "ends"), suffix="_2").collect()
     expected = pl.DataFrame(
         [
             pl.Series("chromosome", ["chr1", "chr1", "chr1", "chr1", "chr1", "chr1"], dtype=pl.Utf8),
@@ -70,6 +70,8 @@ def test_join():
         ]
     )
     sorted_res = res.sort(["starts", "ends", "starts_2", "ends_2"])
+    print(expected)
+    print(sorted_res)
 
     assert sorted_res.frame_equal(expected)
 
@@ -118,7 +120,7 @@ def test_time():
 
 
 def test_overlap():
-    res = df.interval.overlap(df2.lazy(), on=("starts", "ends"))
+    res = df_.interval.overlap(df2_.lazy(), on=("starts", "ends"))
     a = res.collect().sort("starts")
     expected = pl.DataFrame({"chromosome": ["chr1"] * 3, "starts": [0, 5, 6], "ends": [6, 7, 10]})
 
@@ -185,30 +187,32 @@ def test_join_groupby_2():
     assert res.frame_equal(expected_result)
 
 
-def test_join_no_overlap():
-    df = pl.LazyFrame(
-        {
-            "a": [
-                1,
-                10,
-                30,
-                0,
-            ],
-            "b": [
-                2,
-                11,
-                40,
-                10,
-            ],
-        },
-    )
+df = pl.LazyFrame(
+    {
+        "a": [
+            1,
+            10,
+            30,
+            0,
+        ],
+        "b": [
+            2,
+            11,
+            40,
+            10,
+        ],
+    },
+)
 
-    df2 = pl.LazyFrame(
-        {
-            "a": [-5, 6, 0, 100, 100, 400],
-            "b": [5, 7, 1, 200, 200, 600],
-        },
-    )
+df2 = pl.LazyFrame(
+    {
+        "a": [-5, 6, 0, 100, 100, 400],
+        "b": [5, 7, 1, 200, 200, 600],
+    },
+)
+
+
+def test_join_left():
 
     res = df.interval.join(
         df2.lazy(),
@@ -216,6 +220,36 @@ def test_join_no_overlap():
         how="left",
     )
 
-    print("res")
+    expected_result = pl.DataFrame(
+        [
+            pl.Series("a", [10, 30, 0, 0, 0, 1], dtype=pl.Int64),
+            pl.Series("b", [11, 40, 10, 10, 10, 2], dtype=pl.Int64),
+            pl.Series("__count__", [2, 2, 1, 1, 1, 1], dtype=pl.UInt32),
+            pl.Series("a_right", [None, None, 0, 6, -5, -5], dtype=pl.Int64),
+            pl.Series("b_right", [None, None, 1, 7, 5, 5], dtype=pl.Int64),
+        ]
+    )
     print(res.collect())
-    raise
+    print(expected_result)
+
+    assert expected_result.frame_equal(res.collect())
+
+
+def test_join_right():
+    res = df.interval.join(
+        df2.lazy(),
+        on=("a", "b"),
+        how="right",
+    )
+
+    expected_result = pl.DataFrame(
+        [
+            pl.Series("a", [10, 30, 0, 0, 0, 1], dtype=pl.Int64),
+            pl.Series("b", [11, 40, 10, 10, 10, 2], dtype=pl.Int64),
+            pl.Series("__count__", [2, 2, 1, 1, 1, 1], dtype=pl.UInt32),
+            pl.Series("a_right", [None, None, 0, 6, -5, -5], dtype=pl.Int64),
+            pl.Series("b_right", [None, None, 1, 7, 5, 5], dtype=pl.Int64),
+        ]
+    )
+
+    assert expected_result.frame_equal(res.collect())

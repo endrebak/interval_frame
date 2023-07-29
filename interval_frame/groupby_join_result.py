@@ -16,7 +16,6 @@ class GroupByJoinResult:
         secondary_end: str,
         suffix: str,
         by: Optional[List[str]] = None,
-        join_type: Literal["inner", "left", "outer", "semi", "anti", "cross"] = "inner",
         deduplicate_rows: bool = False,
     ):
         """
@@ -55,7 +54,7 @@ class GroupByJoinResult:
         self.suffix = suffix
         self.groupby_args_given = by is not None
         self.by = by if self.groupby_args_given else [ROW_NUMBER_PROPERTY]
-        self.joined = self._perform_join(join_type)
+        self.joined = self._perform_join("inner")
 
     @staticmethod
     def _rename_if_same(
@@ -112,15 +111,7 @@ class GroupByJoinResult:
         Returns:
         - True if at least one of the frames is empty. False otherwise.
         """
-        main_frame_empty = self._is_frame_empty(self.main_frame)
-        secondary_frame_empty = self._is_frame_empty(self.secondary_frame)
-        joined_frame_empty = self._is_frame_empty(self.joined)
-
-        return main_frame_empty or secondary_frame_empty or joined_frame_empty
-
-    @staticmethod
-    def _is_frame_empty(frame: pl.LazyFrame) -> bool:
-        return frame.first().collect().shape[0] == 0
+        return self.joined.first().collect().shape[0] == 0
 
     def get_joined_colnames_secondary(self) -> List[str]:
         """
@@ -173,7 +164,6 @@ class GroupByJoinResult:
             self.by + [COUNT_PROPERTY],
         )
 
-
     def get_colnames_secondary_without_groupby(
         self,
     ) -> List[str]:
@@ -185,3 +175,15 @@ class GroupByJoinResult:
             joined_colnames_secondary,
             self.by,
         )
+
+    def groups_unique_to_left(self):
+        """
+        Returns the groups that are unique to the left frame.
+        """
+        return self.main_frame.join(self.secondary_frame, how="anti", on=self.by)
+
+    def groups_unique_to_right(self):
+        """
+        Returns the groups that are unique to the left frame.
+        """
+        return self.secondary_frame.join(self.main_frame, how="anti", on=self.by)

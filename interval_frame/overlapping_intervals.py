@@ -26,9 +26,9 @@ class OverlappingIntervals:
     """
 
     def __init__(
-        self,
-        joined_result: "GroupByJoinResult",
-        closed_intervals: bool = False,
+            self,
+            joined_result: "GroupByJoinResult",
+            closed_intervals: bool = False,
     ) -> None:
         """
         Initializes the OverlappingIntervals object.
@@ -85,9 +85,9 @@ class OverlappingIntervals:
 
     @staticmethod
     def lengths(
-        starts: str,
-        ends: str,
-        outname: str = "",
+            starts: str,
+            ends: str,
+            outname: str = "",
     ) -> pl.Expr:
         """
         Calculates the lengths of intervals.
@@ -100,7 +100,7 @@ class OverlappingIntervals:
         Returns:
         - An expression representing the lengths of the intervals.
         """
-        return pl.col(ends).explode().sub(pl.col(starts).explode()).explode().alias(outname)
+        return pl.col(ends).explode().inspect().sub(pl.col(starts).explode()).explode().alias(outname)
 
     def find_starts_in_ends(self) -> List[pl.Expr]:
         """
@@ -168,9 +168,9 @@ class OverlappingIntervals:
     # ... Rest of the methods with similar improvements ...
     @staticmethod
     def repeat_frame(
-        columns,
-        startsin,
-        endsin,
+            columns,
+            startsin,
+            endsin,
     ) -> pl.Expr:
         """
         Repeats the values in specified columns based on the difference between the start and end values.
@@ -187,10 +187,10 @@ class OverlappingIntervals:
 
     @staticmethod
     def mask_and_repeat_frame(
-        columns,
-        mask,
-        startsin,
-        endsin,
+            columns,
+            mask,
+            startsin,
+            endsin,
     ) -> pl.Expr:
         """
         Applies a mask to the values in specified columns, and then repeats the masked values based on the difference
@@ -219,9 +219,9 @@ class OverlappingIntervals:
 
     @staticmethod
     def repeat_other(
-        columns,
-        starts,
-        diffs,
+            columns,
+            starts,
+            diffs,
     ):
         """
         Repeats the values in specified columns based on specified start and end values.
@@ -244,7 +244,8 @@ class OverlappingIntervals:
     def overlapping_pairs(
             self,
             how: Literal["inner", "left", "right", "outer"] = "inner",
-            nulls_last: bool = False, # in case of missing values, should they be last (possible when how "outer", "left", "right")?
+            # in case of missing values, should they be last (possible when how "outer", "left", "right")?
+            nulls_last: bool = False,
     ) -> "pl.LazyFrame":
         """
         Calculates the overlapping pairs in the joined data frames.
@@ -259,11 +260,10 @@ class OverlappingIntervals:
         df_2_column_names_after_join = self.joined_result.get_joined_colnames_secondary()
         df_column_names_without_groupby_ks = self.joined_result.get_colnames_without_groupby()
         self.joined_result.get_colnames_secondary_without_groupby()
+        print(self.joined_result.joined.collect())
 
         # Calculate the top left, bottom left, top right, and bottom right parts of the final result
         missing_left = self.missing_overlaps_left(df_column_names_without_groupby_ks, group_keys, include_right=True)
-        print("missing_left")
-        print(missing_left.collect())
         # print("\nmissing_top_left", missing_top_left.collect())
         top_left = self.calculate_top_left(df_column_names_without_groupby_ks, group_keys)
         bottom_left = self.calculate_bottom_left(df_column_names_without_groupby_ks, group_keys)
@@ -277,14 +277,8 @@ class OverlappingIntervals:
         print(top_right.collect())
         print("bottom_right")
         print(bottom_right.collect())
-        top = top_left.with_context(top_right).select(pl.all())
-        bottom = bottom_left.with_context(bottom_right).select(pl.all())
-
-        missing = []
-        if how in ["left", "outer"]:
-            missing += [self.missing_overlaps_left(df_column_names_without_groupby_ks, group_keys, include_right=True)]
-        if how in ["right", "outer"]:
-            missing += [self.missing_overlaps_right()]
+        top_left.with_context(top_right).select(pl.all())
+        bottom_left.with_context(bottom_right).select(pl.all())
 
         # Concatenate the parts to get the final result
         overlapping = pl.concat(
@@ -298,17 +292,21 @@ class OverlappingIntervals:
         )
 
         if how == "inner":
-            return overlapping
-        elif nulls_last:
-            return pl.concat(
-                [overlapping] + missing,
-                how="vertical_relaxed"
-            )
+            result = overlapping
         else:
-            return pl.concat(
-                missing + [overlapping],
-                how="vertical_relaxed"
+            missing = self.missing_overlaps(
+                how=how,
+                include_missing_in_other=True,
             )
+
+            with_nulls = [overlapping, missing] if nulls_last else [missing, overlapping]
+
+            result = pl.concat(
+                    with_nulls,
+                    how="vertical_relaxed"
+                )
+
+        return self.explode_by_repeats(result)
 
     def calculate_other_part(self, column_names, start_property, length_property, group_keys):
         """
@@ -331,15 +329,23 @@ class OverlappingIntervals:
         """
         Helper function to calculate the bottom left part of the final result.
         """
-        return self.calculate_other_part(df_column_names_without_groupby_ks, STARTS_1IN2_PROPERTY, LENGTHS_1IN2_PROPERTY,
-                                         group_keys)
+        return self.calculate_other_part(
+            df_column_names_without_groupby_ks,
+            STARTS_1IN2_PROPERTY,
+            LENGTHS_1IN2_PROPERTY,
+            group_keys,
+        )
 
     def calculate_top_right(self, df_2_column_names_after_join, group_keys):
         """
         Helper function to calculate the top right part of the final result.
         """
-        return self.calculate_other_part(df_2_column_names_after_join, STARTS_2IN1_PROPERTY, LENGTHS_2IN1_PROPERTY,
-                                         group_keys)
+        return self.calculate_other_part(
+            df_2_column_names_after_join,
+            STARTS_2IN1_PROPERTY,
+            LENGTHS_2IN1_PROPERTY,
+            group_keys,
+        )
 
     def calculate_self_part(self, column_names, mask_property, start_property, end_property, group_keys):
         """
@@ -377,7 +383,6 @@ class OverlappingIntervals:
         ]
         return self.calculate_self_part(mask_columns, MASK_2IN1_PROPERTY, STARTS_2IN1_PROPERTY, ENDS_2IN1_PROPERTY,
                                         group_keys)
-
 
     def overlaps(self):
         """
@@ -478,56 +483,118 @@ class OverlappingIntervals:
 
     def missing_overlaps(
             self,
-            df_column_names_without_groupby_ks_left,
-            df_column_names_without_groupby_ks_right,
-            group_keys,
-            include_right: bool = False
-    ):
-        """Return the missing overlaps on the left and right sides of the join."""
+            how: Literal["left", "right", "outer"],
+            include_missing_in_other: bool = False,
+    ) -> pl.LazyFrame:
+        """Return the mising overlaps on the left and right sides of the join."""
+        if self.joined_result.is_empty():
+            if how == "left":
+                missing = self.joined_result.main_frame
+            elif how == "right":
+                missing = self.joined_result.secondary_frame
+            else:
+                raise NotImplementedError("how not implemented for empty dataframes")
 
-        missing_top_left = self.calculate_missing_top_left(df_column_names_without_groupby_ks_left, group_keys)
-        missing_bottom_left = self.calculate_missing_bottom_left(df_column_names_without_groupby_ks_left, group_keys)
+            return self.explode_by_repeats(missing)
 
-        missing_top_right = self.calculate_missing_top_right(df_column_names_without_groupby_ks_right, group_keys)
-        missing_bottom_right = self.calculate_missing_bottom_right(df_column_names_without_groupby_ks_right, group_keys)
+        by = self.joined_result.by
+        df_column_names_without_groupby_ks_right = self.joined_result.get_joined_colnames_secondary()
+        df_column_names_without_groupby_ks_left = self.joined_result.get_colnames_without_groupby()
+        if not how in ["left", "right", "outer"]:
+            raise ValueError(f"how must be one of 'left', 'right', 'outer', but was {how}")
 
-        missing_left = self._calculate_missing_overlaps(missing_top_left, missing_bottom_left, group_keys)
-        missing_right = self._calculate_missing_overlaps(missing_top_right, missing_bottom_right, group_keys)
-
-        if include_right:
-            missing_left = missing_left.with_columns(
-                [
-                    pl.lit(None).alias(c) for c in
-                    self.joined_result.get_colnames_secondary_without_groupby()
-                ]
+        missing = []
+        if how in ["left", "outer"]:
+            missing_top_left = self.calculate_missing_top_left(
+                df_column_names_without_groupby_ks_left,
+                by,
+            )
+            print("missing_top_left")
+            print(missing_top_left.collect())
+            missing_bottom_left = self.calculate_missing_bottom_left(
+                df_column_names_without_groupby_ks_left,
+                by,
+            )
+            print(missing_bottom_left.collect())
+            missing_left_within_groups = self._calculate_missing_overlaps(
+                missing_top_left,
+                missing_bottom_left,
+                by,
+                df_column_names_without_groupby_ks_left
             )
 
-        return missing_left, missing_right
+            missing_left = pl.concat([missing_left_within_groups, self.joined_result.groups_unique_to_left()])
 
-    def _calculate_missing_overlaps(self, missing_top, missing_bottom, group_keys):
-        missing = pl.concat(
+            if include_missing_in_other:
+                missing_left = missing_left.with_columns(
+                    [
+                        pl.lit(None).alias(c) for c in
+                        self.joined_result.get_colnames_secondary_without_groupby()
+                    ]
+                )
+            missing.append(missing_left)
+
+        if how in ["right", "outer"]:
+            missing_top_right = self.calculate_missing_top_right(df_column_names_without_groupby_ks_right, by)
+            print("missing_top_right")
+            print(missing_top_right.collect())
+            missing_bottom_right = self.calculate_missing_bottom_right(df_column_names_without_groupby_ks_right,
+                                                                       by)
+            print("missing_bottom_right")
+            print(missing_bottom_right.collect())
+            missing_right_within_groups = self._calculate_missing_overlaps(missing_top_right, missing_bottom_right, by,
+                                                                           df_column_names_without_groupby_ks_right)
+            missing_right = pl.concat([missing_right_within_groups, self.joined_result.groups_unique_to_right()])
+            print("missing_right")
+            print(missing_right.collect())
+
+            if include_missing_in_other:
+                missing_right = missing_right.with_columns(
+                    [
+                        pl.lit(None).alias(c) for c in
+                        self.joined_result.get_colnames_without_groupby()
+                    ]
+                )
+
+            missing.append(missing_right)
+
+        return pl.concat(missing, how="vertical_relaxed")
+
+    def _calculate_missing_overlaps(
+            self,
+            missing_top,
+            missing_bottom,
+            group_keys,
+            colnames_without_groupby: List[str]
+    ):
+        colnames_without_groupby_and_count = [c for c in colnames_without_groupby if not c == COUNT_PROPERTY]
+        print(colnames_without_groupby_and_count)
+        print("group keys {}".format(group_keys))
+        return pl.concat(
             [
                 missing_top,
                 missing_bottom,
             ]
         ).groupby(
-            self.joined_result.get_colnames_without_groupby_and_count(),
+            colnames_without_groupby_and_count,
         ).agg(
-            pl.all()
+            [
+                pl.col(group_keys).first(),
+                pl.col(COUNT_PROPERTY)
+            ]
         ).filter(
+            # if it is missing in both directions, it had no overlaps
             pl.col(COUNT_PROPERTY).list.lengths() == 2,
         ).groupby(
             group_keys
         ).agg(
             [
-                pl.col(self.joined_result.get_colnames_without_groupby_and_count()),
+                pl.col(colnames_without_groupby_and_count),
                 pl.col(COUNT_PROPERTY).list.sum().explode().keep_name(),
             ]
         ).explode(
-            pl.all()
+            pl.col(colnames_without_groupby)
         )
-
-        return missing
 
     def missing_overlaps_left(
             self,
@@ -551,7 +618,7 @@ class OverlappingIntervals:
             pl.all()
         ).filter(
             pl.col(COUNT_PROPERTY).list.lengths() == 2,
-            ).groupby(
+        ).groupby(
             group_keys
         ).agg(
             [
@@ -576,8 +643,10 @@ class OverlappingIntervals:
         """
         Helper function to calculate the top part of the missing in left or right.
         """
+        # group_missing_in_right =
         return (
-            self.data.groupby(group_keys)
+            self.data
+            .groupby(group_keys)
             .agg(
                 pl.col(df_column_names_without_groupby_ks).explode().filter(
                     ~pl.col(mask_property).explode()
@@ -588,12 +657,13 @@ class OverlappingIntervals:
         ).sort(group_keys)
 
     def _calculate_missing_other(self, df_column_names_without_groupby_ks, group_keys, starts_property,
-                                  lengths_property):
+                                 lengths_property):
         """
         Helper function to calculate the bottom part of the missing in left or right.
         """
         return (
-            self.data.groupby(group_keys)
+            self.data
+            .groupby(group_keys)
             .agg(
                 [
                     pl.all().explode(),
@@ -612,7 +682,7 @@ class OverlappingIntervals:
                                 dtype=pl.UInt32,
                             ).explode().unique()
                         ]
-                    ).alias("__duplicated_indices__")
+                    ).drop_nulls().alias("__duplicated_indices__")
                 ]
             )
             .groupby(group_keys).agg(
@@ -679,7 +749,7 @@ class OverlappingIntervals:
                     self.joined_result.get_colnames_secondary_without_groupby()
                 ).explode().filter(
                     ~pl.col(MASK_1IN2_PROPERTY).explode().inspect("mask {}")
-                )#.repeat_by(pl.col(COUNT_PROPERTY).explode().filter(~pl.col(MASK_1IN2_PROPERTY).explode())).explode(),
+                )
+                # .repeat_by(pl.col(COUNT_PROPERTY).explode().filter(~pl.col(MASK_1IN2_PROPERTY).explode())).explode(),
             ]
         )
-
