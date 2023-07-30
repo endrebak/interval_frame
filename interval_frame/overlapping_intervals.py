@@ -48,8 +48,7 @@ class OverlappingIntervals:
         # The main data processing pipeline, broken down into multiple stages for clarity
         self.data = (
             joined_result.joined.groupby(group_keys)
-            .agg([pl.all().explode()] + self.find_starts_in_ends())
-            .groupby(group_keys)
+            .agg([pl.all().explode()] + self.find_starts_in_ends()) .groupby(group_keys)
             .agg([pl.all().explode()] + self.compute_masks())
             .groupby(group_keys)
             .agg(
@@ -65,8 +64,24 @@ class OverlappingIntervals:
             .explode(pl.exclude(group_keys))
         )
 
+    def explode_by_repeats(
+            self,
+            how: Literal["left", "right", "outer"],
+    ):
+        if how == "outer":
+            return self.explode_by_multiplied_repeats(self.joined_result.joined)
+        elif how == "left":
+            return self._explode_by_repeats(frame=self.joined_result.main_frame, exclude=self.joined_result.main_count_property)
+        elif how == "right":
+            return self._explode_by_repeats(frame=self.joined_result.secondary_frame, exclude=self.joined_result.secondary_count_property)
+
+
     @staticmethod
-    def explode_by_repeats(frame: pl.LazyFrame) -> pl.LazyFrame:
+    def _explode_by_repeats(
+            frame: pl.LazyFrame,
+            repeats: pl.Expr,
+            exclude: List[str],
+    ) -> pl.LazyFrame:
         """
         Explodes a frame by repeat counts.
 
@@ -79,7 +94,42 @@ class OverlappingIntervals:
         return (
             frame.groupby(pl.all())
             .first()
-            .select(pl.exclude(COUNT_PROPERTY).repeat_by(pl.col(COUNT_PROPERTY).explode()))
+            .select(pl.exclude(exclude).repeat_by(repeats))
+            .explode(pl.all())
+        )
+
+    def explode_by_multiplied_repeats(
+            self,
+            frame: pl.LazyFrame
+    ) -> pl.LazyFrame:
+        """
+        Explodes a frame by repeat counts.
+
+        Arguments:
+        - frame: The input data frame.
+
+        Returns:
+        - The exploded frame.
+        """
+        counts_left = self.joined_result.main_count_property
+        counts_right = self.joined_result.secondary_count_property
+        counts = pl.col(
+            counts_left
+        ).explode().fill_null(1).mul(
+            pl.col(
+                counts_right
+            ).explode()
+            .fill_null(1)
+        )
+        return (
+            frame.groupby(pl.all())
+            .first()
+            .select(
+                pl.exclude(counts_left, counts_right)
+                .repeat_by(
+                    counts.explode()
+                )
+            )
             .explode(pl.all())
         )
 
@@ -300,13 +350,16 @@ class OverlappingIntervals:
             )
 
             with_nulls = [overlapping, missing] if nulls_last else [missing, overlapping]
+            for df in with_nulls:
+                print("DF {}")
+                print(df.collect())
 
             result = pl.concat(
                     with_nulls,
                     how="vertical_relaxed"
                 )
 
-        return self.explode_by_repeats(result)
+        return self.explode_by_multiplied_repeats(result)
 
     def calculate_other_part(self, column_names, start_property, length_property, group_keys):
         """
@@ -425,7 +478,7 @@ class OverlappingIntervals:
         ).sort(grouping_cols)
 
         # Combine the top left and bottom left parts and explode by the number of repeats
-        return self.explode_by_repeats(pl.concat([top_left, bottom_left]))
+        return self.explode_by_main_frame_repeats(pl.concat([top_left, bottom_left]))
 
     def _calculate_missing_top_left(self, df_column_names_without_groupby_ks, group_keys):
         """
@@ -495,7 +548,7 @@ class OverlappingIntervals:
             else:
                 raise NotImplementedError("how not implemented for empty dataframes")
 
-            return self.explode_by_repeats(missing)
+            return self.explode_by_main_frame_repeats(missing)
 
         by = self.joined_result.by
         df_column_names_without_groupby_ks_right = self.joined_result.get_joined_colnames_secondary()
@@ -517,13 +570,25 @@ class OverlappingIntervals:
             )
             print(missing_bottom_left.collect())
             missing_left_within_groups = self._calculate_missing_overlaps(
-                missing_top_left,
-                missing_bottom_left,
-                by,
-                df_column_names_without_groupby_ks_left
+                missing_top=missing_top_left,
+                missing_bottom=missing_bottom_left,
+                group_keys=by,
+                colnames_without_groupby=df_column_names_without_groupby_ks_left,
+                count_column=self.joined_result.main_count_property
             )
+            print(missing_left_within_groups.collect())
 
-            missing_left = pl.concat([missing_left_within_groups, self.joined_result.groups_unique_to_left()])
+            if self.joined_result.groupby_args_given:
+                missing_left = pl.concat(
+                    [
+                        missing_left_within_groups,
+                        self.joined_result.groups_unique_to_left()
+                    ]
+                )
+            else:
+                missing_left = missing_left_within_groups
+            print("missing_left")
+            print(missing_left.collect())
 
             if include_missing_in_other:
                 missing_left = missing_left.with_columns(
@@ -542,34 +607,54 @@ class OverlappingIntervals:
                                                                        by)
             print("missing_bottom_right")
             print(missing_bottom_right.collect())
-            missing_right_within_groups = self._calculate_missing_overlaps(missing_top_right, missing_bottom_right, by,
-                                                                           df_column_names_without_groupby_ks_right)
-            missing_right = pl.concat([missing_right_within_groups, self.joined_result.groups_unique_to_right()])
+            missing_right_within_groups = self._calculate_missing_overlaps(
+                missing_top=missing_top_right,
+                missing_bottom=missing_bottom_right,
+                group_keys=by,
+                colnames_without_groupby=df_column_names_without_groupby_ks_right,
+                count_column=self.joined_result.secondary_count_property
+            )
+            print("missing_right_within_groups")
+            print(missing_right_within_groups.collect())
+            if self.joined_result.groupby_args_given:
+                missing_right = pl.concat(
+                    [
+                        missing_right_within_groups,
+                        self.joined_result.groups_unique_to_right()
+                    ]
+                )
+            else:
+                missing_right = missing_right_within_groups
             print("missing_right")
             print(missing_right.collect())
 
             if include_missing_in_other:
-                missing_right = missing_right.with_columns(
+                missing_right = missing_right.select(
                     [
                         pl.lit(None).alias(c) for c in
-                        self.joined_result.get_colnames_without_groupby()
-                    ]
+                        self.joined_result.by + self.joined_result.get_colnames_without_groupby()
+                    ] + [pl.col(self.joined_result.get_colnames_secondary_without_groupby())]
                 )
+                print("missing_right")
+                print(missing_right.collect())
 
             missing.append(missing_right)
-
-        return pl.concat(missing, how="vertical_relaxed")
+        for m in missing:
+            print(m.collect())
+        return pl.concat(
+            missing,
+            how="vertical_relaxed"
+        )
 
     def _calculate_missing_overlaps(
             self,
             missing_top,
             missing_bottom,
             group_keys,
-            colnames_without_groupby: List[str]
+            count_column: str,
+            colnames_without_groupby: List[str],
     ):
-        colnames_without_groupby_and_count = [c for c in colnames_without_groupby if not c == COUNT_PROPERTY]
-        print(colnames_without_groupby_and_count)
-        print("group keys {}".format(group_keys))
+        colnames_without_groupby_and_count = [c for c in colnames_without_groupby if not c == count_column]
         return pl.concat(
             [
                 missing_top,
@@ -580,17 +665,17 @@ class OverlappingIntervals:
         ).agg(
             [
                 pl.col(group_keys).first(),
-                pl.col(COUNT_PROPERTY)
+                pl.col(count_column)
             ]
         ).filter(
             # if it is missing in both directions, it had no overlaps
-            pl.col(COUNT_PROPERTY).list.lengths() == 2,
+            pl.col(count_column).list.lengths() == 2,
         ).groupby(
             group_keys
         ).agg(
             [
                 pl.col(colnames_without_groupby_and_count),
-                pl.col(COUNT_PROPERTY).list.sum().explode().keep_name(),
+                pl.col(count_column).list.sum().explode().floordiv(2).keep_name(),
             ]
         ).explode(
             pl.col(colnames_without_groupby)

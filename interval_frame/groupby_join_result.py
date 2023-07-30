@@ -48,13 +48,15 @@ class GroupByJoinResult:
         )
         self.columns = main_frame.columns
         self.main_frame = self._deduplicate_if_needed(main_frame, deduplicate_rows)
-        self.secondary_frame = secondary_frame
+        self.secondary_frame = self._deduplicate_if_needed(secondary_frame, deduplicate_rows)
         self.main_start = main_start
         self.main_end = main_end
         self.suffix = suffix
         self.groupby_args_given = by is not None
         self.by = by if self.groupby_args_given else [ROW_NUMBER_PROPERTY]
         self.joined = self._perform_join("inner")
+        self.main_count_property = COUNT_PROPERTY
+        self.secondary_count_property = COUNT_PROPERTY + suffix
 
     @staticmethod
     def _rename_if_same(

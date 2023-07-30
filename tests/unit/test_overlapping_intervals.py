@@ -115,7 +115,9 @@ def test_time():
         ]
     )
 
-    res = df_1.interval.join(df_2, on=("start", "end"), suffix="_whatevz")
+    res = df_1.interval.join(df_2, on=("start", "end"), suffix="_whatevz").sort("id")
+    print(res.collect())
+    print(expected)
     assert res.collect().frame_equal(expected)
 
 
@@ -145,7 +147,7 @@ def test_join_groupby():
     )
     df2 = pl.LazyFrame({"k": ["B", "A", "C", "B"], "a": [6, 0, 5, 29], "b": [10, 3, 6, 30]})
 
-    res = df.interval.join(df2.lazy(), on=("a", "b"), by="k", suffix="_2").collect().sort("k", descending=True)
+    res = df.interval.join(df2.lazy(), on=("a", "b"), by=["k"], suffix="_2").collect().sort("k", descending=True)
     print(res)
     expected_result = pl.DataFrame(
         [
@@ -166,7 +168,7 @@ def test_join_groupby_2():
     df2 = pl.LazyFrame({"k": ["B", "A", "C", "A", "A"], "a": [6, 0, 5, 29, 0], "b": [10, 3, 6, 30, 300]})
 
     res = (
-        df.interval.join(df2, on=("a", "b"), by="k")
+        df.interval.join(df2, on=("a", "b"), by=["k"])
         .collect()
         .sort("k", "a", "b", "a_right", "b_right", descending=False)
     )
@@ -222,17 +224,18 @@ def test_join_left():
 
     expected_result = pl.DataFrame(
         [
-            pl.Series("a", [10, 30, 0, 0, 0, 1], dtype=pl.Int64),
-            pl.Series("b", [11, 40, 10, 10, 10, 2], dtype=pl.Int64),
-            pl.Series("__count__", [2, 2, 1, 1, 1, 1], dtype=pl.UInt32),
-            pl.Series("a_right", [None, None, 0, 6, -5, -5], dtype=pl.Int64),
-            pl.Series("b_right", [None, None, 1, 7, 5, 5], dtype=pl.Int64),
+            pl.Series("a", [30, 10, 1, 0, 0, 0], dtype=pl.Int64),
+            pl.Series("b", [40, 11, 2, 10, 10, 10], dtype=pl.Int64),
+            pl.Series("a_right", [None, None, -5, 6, 0, -5], dtype=pl.Int64),
+            pl.Series("b_right", [None, None, 5, 7, 1, 5], dtype=pl.Int64),
         ]
     )
-    print(res.collect())
+
+    sorted_res = res.collect().sort("a", "b", "a_right", "b_right", descending=True)
+    print(sorted_res)
     print(expected_result)
 
-    assert expected_result.frame_equal(res.collect())
+    assert expected_result.frame_equal(sorted_res)
 
 
 def test_join_right():
@@ -241,6 +244,8 @@ def test_join_right():
         on=("a", "b"),
         how="right",
     )
+    print("RES")
+    print(res.collect())
 
     expected_result = pl.DataFrame(
         [
