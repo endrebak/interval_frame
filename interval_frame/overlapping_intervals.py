@@ -11,7 +11,6 @@ from interval_frame.constants import (
     MASK_1IN2_PROPERTY,
     LENGTHS_2IN1_PROPERTY,
     LENGTHS_1IN2_PROPERTY,
-    COUNT_PROPERTY,
 )
 from interval_frame.helper_ops import search, add_length
 
@@ -38,7 +37,6 @@ class OverlappingIntervals:
         - closed_intervals: If True, the intervals are considered to be closed (inclusive). Default is False.
         """
         # Ensure that the required property is present in the joined columns
-        assert COUNT_PROPERTY in joined_result.joined.columns, str(joined_result.joined.columns)
 
         self.joined_result = joined_result
         self.closed_intervals = closed_intervals
@@ -62,75 +60,6 @@ class OverlappingIntervals:
             .groupby(group_keys)
             .agg([pl.all()] + self.add_lengths())
             .explode(pl.exclude(group_keys))
-        )
-
-    def explode_by_repeats(
-            self,
-            how: Literal["left", "right", "outer"],
-    ):
-        if how == "outer":
-            return self.explode_by_multiplied_repeats(self.joined_result.joined)
-        elif how == "left":
-            return self._explode_by_repeats(frame=self.joined_result.main_frame, exclude=self.joined_result.main_count_property)
-        elif how == "right":
-            return self._explode_by_repeats(frame=self.joined_result.secondary_frame, exclude=self.joined_result.secondary_count_property)
-
-
-    @staticmethod
-    def _explode_by_repeats(
-            frame: pl.LazyFrame,
-            repeats: pl.Expr,
-            exclude: List[str],
-    ) -> pl.LazyFrame:
-        """
-        Explodes a frame by repeat counts.
-
-        Arguments:
-        - frame: The input data frame.
-
-        Returns:
-        - The exploded frame.
-        """
-        return (
-            frame.groupby(pl.all())
-            .first()
-            .select(pl.exclude(exclude).repeat_by(repeats))
-            .explode(pl.all())
-        )
-
-    def explode_by_multiplied_repeats(
-            self,
-            frame: pl.LazyFrame
-    ) -> pl.LazyFrame:
-        """
-        Explodes a frame by repeat counts.
-
-        Arguments:
-        - frame: The input data frame.
-
-        Returns:
-        - The exploded frame.
-        """
-        counts_left = self.joined_result.main_count_property
-        counts_right = self.joined_result.secondary_count_property
-        counts = pl.col(
-            counts_left
-        ).explode().fill_null(1).mul(
-            pl.col(
-                counts_right
-            ).explode()
-            .fill_null(1)
-        )
-        return (
-            frame.groupby(pl.all())
-            .first()
-            .select(
-                pl.exclude(counts_left, counts_right)
-                .repeat_by(
-                    counts.explode()
-                )
-            )
-            .explode(pl.all())
         )
 
     @staticmethod
@@ -359,7 +288,7 @@ class OverlappingIntervals:
                     how="vertical_relaxed"
                 )
 
-        return self.explode_by_multiplied_repeats(result)
+        return result
 
     def calculate_other_part(self, column_names, start_property, length_property, group_keys):
         """
@@ -478,7 +407,7 @@ class OverlappingIntervals:
         ).sort(grouping_cols)
 
         # Combine the top left and bottom left parts and explode by the number of repeats
-        return self.explode_by_main_frame_repeats(pl.concat([top_left, bottom_left]))
+        return pl.concat([top_left, bottom_left])
 
     def _calculate_missing_top_left(self, df_column_names_without_groupby_ks, group_keys):
         """
@@ -544,11 +473,13 @@ class OverlappingIntervals:
             if how == "left":
                 missing = self.joined_result.main_frame
             elif how == "right":
+                print("right" * 50)
                 missing = self.joined_result.secondary_frame
+                print(self.joined_result.secondary_frame.collect())
             else:
                 raise NotImplementedError("how not implemented for empty dataframes")
 
-            return self.explode_by_main_frame_repeats(missing)
+            return missing
 
         by = self.joined_result.by
         df_column_names_without_groupby_ks_right = self.joined_result.get_joined_colnames_secondary()
@@ -572,9 +503,6 @@ class OverlappingIntervals:
             missing_left_within_groups = self._calculate_missing_overlaps(
                 missing_top=missing_top_left,
                 missing_bottom=missing_bottom_left,
-                group_keys=by,
-                colnames_without_groupby=df_column_names_without_groupby_ks_left,
-                count_column=self.joined_result.main_count_property
             )
             print(missing_left_within_groups.collect())
 
@@ -610,13 +538,14 @@ class OverlappingIntervals:
             missing_right_within_groups = self._calculate_missing_overlaps(
                 missing_top=missing_top_right,
                 missing_bottom=missing_bottom_right,
-                group_keys=by,
-                colnames_without_groupby=df_column_names_without_groupby_ks_right,
-                count_column=self.joined_result.secondary_count_property
             )
             print("missing_right_within_groups")
             print(missing_right_within_groups.collect())
             if self.joined_result.groupby_args_given:
+                print("111" * 50)
+                print(missing_right_within_groups.collect())
+                print("222" * 50)
+                print(self.joined_result.groups_unique_to_right().collect())
                 missing_right = pl.concat(
                     [
                         missing_right_within_groups,
@@ -650,35 +579,9 @@ class OverlappingIntervals:
             self,
             missing_top,
             missing_bottom,
-            group_keys,
-            count_column: str,
-            colnames_without_groupby: List[str],
     ):
-        colnames_without_groupby_and_count = [c for c in colnames_without_groupby if not c == count_column]
-        return pl.concat(
-            [
-                missing_top,
-                missing_bottom,
-            ]
-        ).groupby(
-            colnames_without_groupby_and_count,
-        ).agg(
-            [
-                pl.col(group_keys).first(),
-                pl.col(count_column)
-            ]
-        ).filter(
-            # if it is missing in both directions, it had no overlaps
-            pl.col(count_column).list.lengths() == 2,
-        ).groupby(
-            group_keys
-        ).agg(
-            [
-                pl.col(colnames_without_groupby_and_count),
-                pl.col(count_column).list.sum().explode().floordiv(2).keep_name(),
-            ]
-        ).explode(
-            pl.col(colnames_without_groupby)
+        return missing_bottom.join(missing_top, on=missing_top.columns, how="semi").select(
+            pl.col(missing_top.columns)
         )
 
     def missing_overlaps_left(
@@ -692,26 +595,9 @@ class OverlappingIntervals:
         missing_top_left = self.calculate_missing_top_left(df_column_names_without_groupby_ks, group_keys)
         missing_bottom_left = self.calculate_missing_bottom_left(df_column_names_without_groupby_ks, group_keys)
 
-        missing_left = pl.concat(
-            [
-                missing_top_left,
-                missing_bottom_left,
-            ]
-        ).groupby(
-            self.joined_result.get_colnames_without_groupby_and_count(),
-        ).agg(
-            pl.all()
-        ).filter(
-            pl.col(COUNT_PROPERTY).list.lengths() == 2,
-        ).groupby(
-            group_keys
-        ).agg(
-            [
-                pl.col(self.joined_result.get_colnames_without_groupby_and_count()),
-                pl.col(COUNT_PROPERTY).list.sum().explode().keep_name(),
-            ]
-        ).explode(
-            pl.all()
+        missing_left = self._calculate_missing_overlaps(
+            missing_top=missing_top_left,
+            missing_bottom=missing_bottom_left,
         )
 
         if include_right:
@@ -835,6 +721,5 @@ class OverlappingIntervals:
                 ).explode().filter(
                     ~pl.col(MASK_1IN2_PROPERTY).explode().inspect("mask {}")
                 )
-                # .repeat_by(pl.col(COUNT_PROPERTY).explode().filter(~pl.col(MASK_1IN2_PROPERTY).explode())).explode(),
             ]
         )

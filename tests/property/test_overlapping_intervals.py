@@ -6,7 +6,7 @@ from tests.property.helpers import to_pyranges, compare_frames
 from tests.property.hypothesis_settings import MAX_EXAMPLES, PRINT_BLOB
 from tests.property.generate_intervals import interval_df
 
-
+MAX_EXAMPLES = 1000
 @settings(max_examples=MAX_EXAMPLES, print_blob=PRINT_BLOB, deadline=None)
 @given(df=interval_df(), df2=interval_df())
 def test_join(df, df2):
@@ -32,6 +32,7 @@ def test_missing_left(df, df2):
 
 @settings(max_examples=MAX_EXAMPLES, print_blob=PRINT_BLOB, deadline=None)
 @given(df=interval_df(), df2=interval_df())
+@reproduce_failure('6.46.9', b'AXicY2RABowoPAAARgAD')
 def test_missing_right(df, df2):
     print(df)
     print(df2)

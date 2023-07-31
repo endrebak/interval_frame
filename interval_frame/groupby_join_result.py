@@ -2,7 +2,7 @@ from typing import Optional, List, Literal
 
 import polars as pl
 
-from interval_frame.constants import ROW_NUMBER_PROPERTY, COUNT_PROPERTY
+from interval_frame.constants import ROW_NUMBER_PROPERTY
 
 
 class GroupByJoinResult:
@@ -16,7 +16,6 @@ class GroupByJoinResult:
         secondary_end: str,
         suffix: str,
         by: Optional[List[str]] = None,
-        deduplicate_rows: bool = False,
     ):
         """
         Initializes the GroupByJoinResult object and performs a series of operations
@@ -47,16 +46,14 @@ class GroupByJoinResult:
             suffix,
         )
         self.columns = main_frame.columns
-        self.main_frame = self._deduplicate_if_needed(main_frame, deduplicate_rows)
-        self.secondary_frame = self._deduplicate_if_needed(secondary_frame, deduplicate_rows)
+        self.main_frame = main_frame
+        self.secondary_frame = secondary_frame
         self.main_start = main_start
         self.main_end = main_end
         self.suffix = suffix
         self.groupby_args_given = by is not None
         self.by = by if self.groupby_args_given else [ROW_NUMBER_PROPERTY]
         self.joined = self._perform_join("inner")
-        self.main_count_property = COUNT_PROPERTY
-        self.secondary_count_property = COUNT_PROPERTY + suffix
 
     @staticmethod
     def _rename_if_same(
@@ -65,16 +62,6 @@ class GroupByJoinResult:
         suffix: str,
     ) -> str:
         return name1 + suffix if name1 == name2 else name2
-
-    @staticmethod
-    def _deduplicate_if_needed(
-        frame: pl.LazyFrame,
-        deduplicate: bool,
-    ) -> pl.LazyFrame:
-        if deduplicate:
-            return frame.groupby(frame.columns).agg([pl.all(), pl.count().alias(COUNT_PROPERTY)])
-
-        return frame
 
     def _perform_join(
         self,
@@ -155,17 +142,6 @@ class GroupByJoinResult:
             self.by,
         )
 
-    def get_colnames_without_groupby_and_count(
-            self,
-    ) -> List[str]:
-        """
-        Returns the column names of the main frame excluding the 'groupby' and COUNT columns.
-        """
-        return self._get_cols_excluding(
-            self.main_frame.columns,
-            self.by + [COUNT_PROPERTY],
-        )
-
     def get_colnames_secondary_without_groupby(
         self,
     ) -> List[str]:
@@ -188,4 +164,7 @@ class GroupByJoinResult:
         """
         Returns the groups that are unique to the left frame.
         """
-        return self.secondary_frame.join(self.main_frame, how="anti", on=self.by)
+        secondary = self.secondary_frame.join(self.main_frame, how="left", on=self.by).filter(
+            pl.col(self.main_frame.columns).is_null().all()
+        )
+        return secondary.rename(dict(zip(secondary.columns, self.get_joined_colnames_secondary())))
