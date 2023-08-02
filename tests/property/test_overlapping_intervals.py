@@ -32,7 +32,6 @@ def test_missing_left(df, df2):
 
 @settings(max_examples=MAX_EXAMPLES, print_blob=PRINT_BLOB, deadline=None)
 @given(df=interval_df(), df2=interval_df())
-@reproduce_failure('6.46.9', b'AXicY2RABowoPAAARgAD')
 def test_missing_right(df, df2):
     print(df)
     print(df2)
@@ -41,8 +40,3 @@ def test_missing_right(df, df2):
     res_interval_frame = df.interval.nonoverlapping(df2, on=("Start", "End"), by=["Chromosome"], how="right").collect().to_pandas()
     print("PORANGES", res_interval_frame)
     compare_frames(pd_df=res_pyranges, pl_df=res_interval_frame, comparison_cols=["Start", "End", "Chromosome"])
-
-
-# Add count to the other pyranges df to explode on it too.
-
-# Neccessary for how right

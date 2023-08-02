@@ -528,11 +528,16 @@ class OverlappingIntervals:
             missing.append(missing_left)
 
         if how in ["right", "outer"]:
-            missing_top_right = self.calculate_missing_top_right(df_column_names_without_groupby_ks_right, by)
+            missing_top_right = self.calculate_missing_top_right(
+                df_column_names_without_groupby_ks_right,
+                by
+            )
             print("missing_top_right")
             print(missing_top_right.collect())
-            missing_bottom_right = self.calculate_missing_bottom_right(df_column_names_without_groupby_ks_right,
-                                                                       by)
+            missing_bottom_right = self.calculate_missing_bottom_right(
+                df_column_names_without_groupby_ks_right,
+                by
+            )
             print("missing_bottom_right")
             print(missing_bottom_right.collect())
             missing_right_within_groups = self._calculate_missing_overlaps(
@@ -564,12 +569,17 @@ class OverlappingIntervals:
                         self.joined_result.by + self.joined_result.get_colnames_without_groupby()
                     ] + [pl.col(self.joined_result.get_colnames_secondary_without_groupby())]
                 )
-                print("missing_right")
-                print(missing_right.collect())
-
+            elif how == "right":
+                missing_right = missing_right.rename(
+                    {
+                        new: old
+                        for new, old in zip(
+                        missing_right.columns,
+                        self.joined_result.secondary_frame.columns,
+                    )
+                    }
+                )
             missing.append(missing_right)
-        for m in missing:
-            print(m.collect())
         return pl.concat(
             missing,
             how="vertical_relaxed"

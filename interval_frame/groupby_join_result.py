@@ -160,11 +160,17 @@ class GroupByJoinResult:
         """
         return self.main_frame.join(self.secondary_frame, how="anti", on=self.by)
 
-    def groups_unique_to_right(self):
+    def groups_unique_to_right(
+        self,
+    ):
         """
         Returns the groups that are unique to the left frame.
         """
-        secondary = self.secondary_frame.join(self.main_frame, how="left", on=self.by).filter(
-            pl.col(self.main_frame.columns).is_null().all()
+        in_right_only = self.secondary_frame.join(self.main_frame, how="anti", on=self.by)
+        res = pl.LazyFrame(schema=self.main_frame.schema).join(in_right_only, how="outer", on=self.by)
+        return res.select(
+            [
+                pl.col(self.by),
+                pl.col(self.get_joined_colnames_secondary()),
+            ]
         )
-        return secondary.rename(dict(zip(secondary.columns, self.get_joined_colnames_secondary())))
