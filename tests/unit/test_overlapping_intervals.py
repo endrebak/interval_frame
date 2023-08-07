@@ -2,8 +2,7 @@ from datetime import date
 
 import polars as pl
 
-import interval_frame  # noqa
-
+import interval_frame  # noqa: F401
 
 CHROMOSOME_PROPERTY = "chromosome"
 CHROMOSOME2_PROPERTY = "chromosome_2"
@@ -26,7 +25,7 @@ df_ = pl.DataFrame(
         CHROMOSOME_PROPERTY: ["chr1", "chr1", "chr1", "chr1"],
         STARTS_PROPERTY: [0, 8, 6, 5],
         ENDS_PROPERTY: [6, 9, 10, 7],
-    }
+    },
 )
 
 DF1_COLUMNS = df_.columns
@@ -37,7 +36,7 @@ df2_ = pl.DataFrame(
         STARTS_PROPERTY: [6, 3, 1],
         ENDS_PROPERTY: [7, 8, 2],
         "genes": ["a", "b", "c"],
-    }
+    },
 )
 
 DF2_COLUMNS = df2_.columns
@@ -47,9 +46,9 @@ def chromosome_join(df, df2):
     return (
         df.lazy()
         .sort("starts", ENDS_PROPERTY)
-        .select([pl.all().implode()])
+        .select([pl.all_horizontal().implode()])
         .join(
-            df2.lazy().sort("starts", ENDS_PROPERTY).select([pl.all().implode()]),
+            df2.lazy().sort("starts", ENDS_PROPERTY).select([pl.all_horizontal().implode()]),
             how="cross",
             suffix="_2",
         )
@@ -67,7 +66,7 @@ def test_join():
             pl.Series("starts_2", [1, 3, 3, 6, 3, 6], dtype=pl.Int64),
             pl.Series("ends_2", [2, 8, 8, 7, 8, 7], dtype=pl.Int64),
             pl.Series("genes", ["c", "b", "b", "a", "b", "a"], dtype=pl.Utf8),
-        ]
+        ],
     )
     sorted_res = res.sort(["starts", "ends", "starts_2", "ends_2"])
     print(expected)
@@ -90,7 +89,7 @@ def test_time():
                 date(2022, 5, 16),
                 date(2022, 3, 10),
             ],
-        }
+        },
     )
     df_2 = pl.DataFrame(
         {
@@ -102,7 +101,7 @@ def test_time():
                 date(2022, 4, 1),
                 date(2025, 4, 1),
             ],
-        }
+        },
     )
 
     expected = pl.DataFrame(
@@ -112,7 +111,7 @@ def test_time():
             pl.Series("end", [date(2022, 2, 4), date(2022, 3, 10)], dtype=pl.Date),
             pl.Series("start_whatevz", [date(2021, 12, 31), date(2021, 12, 31)], dtype=pl.Date),
             pl.Series("end_whatevz", [date(2022, 4, 1), date(2022, 4, 1)], dtype=pl.Date),
-        ]
+        ],
     )
 
     res = df_1.interval.join(df_2, on=("start", "end"), suffix="_whatevz").sort("id")
@@ -145,7 +144,7 @@ def test_join_groupby():
                 7,
                 40,
             ],
-        }
+        },
     )
     df2 = pl.LazyFrame({"k": ["B", "A", "C", "B"], "a": [6, 0, 5, 29], "b": [10, 3, 6, 30]})
 
@@ -158,7 +157,7 @@ def test_join_groupby():
             pl.Series("b", [7, 2], dtype=pl.Int64),
             pl.Series("a_2", [6, 0], dtype=pl.Int64),
             pl.Series("b_2", [10, 3], dtype=pl.Int64),
-        ]
+        ],
     )
     print(expected_result)
 
@@ -184,7 +183,7 @@ def test_join_groupby_2():
             pl.Series("b", [2, 2, 40, 40, 200, 7], dtype=pl.Int64),
             pl.Series("a_right", [0, 0, 0, 29, 0, 6], dtype=pl.Int64),
             pl.Series("b_right", [3, 300, 300, 30, 300, 10], dtype=pl.Int64),
-        ]
+        ],
     )
     print(expected_result)
 
@@ -217,7 +216,6 @@ df2 = pl.LazyFrame(
 
 
 def test_join_left():
-
     res = df.interval.join(
         df2.lazy(),
         on=("a", "b"),
@@ -230,7 +228,7 @@ def test_join_left():
             pl.Series("b", [40, 11, 2, 10, 10, 10], dtype=pl.Int64),
             pl.Series("a_right", [None, None, -5, 6, 0, -5], dtype=pl.Int64),
             pl.Series("b_right", [None, None, 5, 7, 1, 5], dtype=pl.Int64),
-        ]
+        ],
     )
 
     sorted_res = res.collect().sort("a", "b", "a_right", "b_right", descending=True)
@@ -255,7 +253,7 @@ def test_join_right():
             pl.Series("b", [2, 10, 10, 10, None, None, None], dtype=pl.Int64),
             pl.Series("a_right", [-5, 6, 0, -5, 400, 100, 100], dtype=pl.Int64),
             pl.Series("b_right", [5, 7, 1, 5, 600, 200, 200], dtype=pl.Int64),
-        ]
+        ],
     )
     print(expected_result)
 

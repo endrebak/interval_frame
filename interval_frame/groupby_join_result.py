@@ -1,4 +1,4 @@
-from typing import Optional, List, Literal
+from typing import List, Literal, Optional
 
 import polars as pl
 
@@ -16,12 +16,12 @@ class GroupByJoinResult:
         secondary_end: str,
         suffix: str,
         by: Optional[List[str]] = None,
-    ):
-        """
-        Initializes the GroupByJoinResult object and performs a series of operations
+    ) -> None:
+        """Initializes the GroupByJoinResult object and performs a series of operations
         on the given data frames.
 
         Arguments:
+        ---------
         - main_frame: The main data frame.
         - secondary_frame: The secondary data frame.
         - main_start: The start of the main frame.
@@ -94,17 +94,16 @@ class GroupByJoinResult:
         )
 
     def is_empty(self) -> bool:
-        """
-        Checks if either of the data frames or the joined frame is empty.
+        """Checks if either of the data frames or the joined frame is empty.
 
-        Returns:
+        Returns
+        -------
         - True if at least one of the frames is empty. False otherwise.
         """
         return self.joined.first().collect().shape[0] == 0
 
     def get_joined_colnames_secondary(self) -> List[str]:
-        """
-        Returns the column names of the secondary frame after the join operation.
+        """Returns the column names of the secondary frame after the join operation.
 
         Columns that are also present in the main frame will have the suffix added.
         """
@@ -134,9 +133,7 @@ class GroupByJoinResult:
     def get_colnames_without_groupby(
         self,
     ) -> List[str]:
-        """
-        Returns the column names of the main frame excluding the 'groupby' columns.
-        """
+        """Returns the column names of the main frame excluding the 'groupby' columns."""
         return self._get_cols_excluding(
             self.main_frame.columns,
             self.by,
@@ -145,9 +142,7 @@ class GroupByJoinResult:
     def get_colnames_secondary_without_groupby(
         self,
     ) -> List[str]:
-        """
-        Returns the column names of the secondary frame excluding the 'groupby' columns.
-        """
+        """Returns the column names of the secondary frame excluding the 'groupby' columns."""
         joined_colnames_secondary = self.get_joined_colnames_secondary()
         return self._get_cols_excluding(
             joined_colnames_secondary,
@@ -155,22 +150,18 @@ class GroupByJoinResult:
         )
 
     def groups_unique_to_left(self):
-        """
-        Returns the groups that are unique to the left frame.
-        """
+        """Returns the groups that are unique to the left frame."""
         return self.main_frame.join(self.secondary_frame, how="anti", on=self.by)
 
     def groups_unique_to_right(
         self,
     ):
-        """
-        Returns the groups that are unique to the left frame.
-        """
+        """Returns the groups that are unique to the left frame."""
         in_right_only = self.secondary_frame.join(self.main_frame, how="anti", on=self.by)
         res = pl.LazyFrame(schema=self.main_frame.schema).join(in_right_only, how="outer", on=self.by)
         return res.select(
             [
                 pl.col(self.by),
                 pl.col(self.get_joined_colnames_secondary()),
-            ]
+            ],
         )

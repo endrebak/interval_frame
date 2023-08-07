@@ -17,5 +17,4 @@ dev = ["pyranges", "pytest", "hypothesis", "bioframe", "ruff"]
 
 [tool.ruff]
 line-length = 120
-select = ["ALL"]
-ignore = ["ANN101"]
+select = ["B", "E", "F"]
